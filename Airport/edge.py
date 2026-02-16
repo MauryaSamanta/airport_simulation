@@ -1,8 +1,16 @@
 class Edge:
 
-    def __init__(self, start_node, end_node, current_state, max_speed, type):
+    def __init__(self, start_node, end_node, length, max_speed, category):
         self.start_node=start_node
         self.end_node=end_node
-        self.current_state=current_state
+        self.length=length
         self.max_speed=max_speed
-        self.type=type
+        self.category=category
+        self.occupied_by=None
+        # self.category=category
+
+    def occupy(self, aircraft):
+        self.occupied_by=aircraft
+    
+    def release(self):
+        self.occupied_by=None
