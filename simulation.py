@@ -15,12 +15,13 @@ def main():
     # -----------------------
     # Create Aircraft
     # -----------------------
-    holding_node = world.get_node("Hold_short_17R")
+    gate_node = world.get_node("A1")
+
 
     aircraft1 = Aircraft(
         callsign="AI101",
-        current_node=holding_node,
-        current_state="WAITING_CLEARANCE"
+        current_node=gate_node,
+        current_state="PARKED"
     )
 
     aircraft_list = [aircraft1]
