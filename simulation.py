@@ -1,60 +1,142 @@
 from Airport.airport_world import AirportWorld
 from Aircraft.aircraft import Aircraft
 from Aircraft.aircraft_physics import AircraftPhysics
-from atc_agents.atc_controller import ATCController
+
+from atc_agents.atc_agent import ATCAgent
+from atc_agents.pilot_agent import PilotAgent
+
+from communication.message_bus import MessageBus
+from ui import Visualizer
+
+import pygame
+import random
 
 
 def main():
 
-    # -----------------------
-    # Build Airport
-    # -----------------------
+    pygame.init()
+
+    # --------------------------------------------------
+    # WORLD
+    # --------------------------------------------------
     world = AirportWorld()
     world.build_airport()
 
-    # -----------------------
-    # Create Aircraft
-    # -----------------------
-    gate_node = world.get_node("A1")
+    aircraft_list = []
 
+    # --------------------------------------------------
+    # COMMUNICATION BUS
+    # --------------------------------------------------
+    bus = MessageBus()
 
-    aircraft1 = Aircraft(
-        callsign="AI101",
-        current_node=gate_node,
-        current_state="PARKED"
-    )
+    # --------------------------------------------------
+    # AGENTS
+    # --------------------------------------------------
+    atc_agent = ATCAgent(bus)
 
-    aircraft_list = [aircraft1]
+    pilot_agents = []
 
-    # -----------------------
-    # Create ATC
-    # -----------------------
-    atc = ATCController(world)
+    # --------------------------------------------------
+    # UI
+    # --------------------------------------------------
+    visualizer = Visualizer(world, aircraft_list)
 
-    # -----------------------
-    # Simulation Loop
-    # -----------------------
-    dt = 1  # seconds per tick
+    # --------------------------------------------------
+    # SIMULATION VARIABLES
+    # --------------------------------------------------
+    running = True
+    dt = 0.1
 
-    for tick in range(100):
+    spawn_interval = 2000  # milliseconds
+    last_spawn_time = 0
+    aircraft_counter = 100
 
-        print(f"\nTICK {tick}")
+    gates = ["A1", "A2"]
 
-        # 1️⃣ ATC evaluates
-        atc.evaluate(aircraft_list)
+    # --------------------------------------------------
+    # SPAWN FUNCTION
+    # --------------------------------------------------
+    def spawn_aircraft():
+        nonlocal aircraft_counter
 
-        # 2️⃣ Update aircraft physics
+        gate_name = random.choice(gates)
+        gate_node = world.get_node(gate_name)
+
+        callsign = f"AI{aircraft_counter}"
+        aircraft_counter += 1
+
+        new_aircraft = Aircraft(
+            callsign=callsign,
+            current_node=gate_node,
+            current_state="PARKED",
+            speed=0.0
+        )
+
+        aircraft_list.append(new_aircraft)
+
+        # Create pilot agent
+        pilot = PilotAgent(new_aircraft, bus)
+        pilot_agents.append(pilot)
+
+    # --------------------------------------------------
+    # MAIN LOOP
+    # --------------------------------------------------
+    while running:
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        current_time = pygame.time.get_ticks()
+
+        # Spawn aircraft periodically
+        if current_time - last_spawn_time > spawn_interval:
+            spawn_aircraft()
+            last_spawn_time = current_time
+
+        # --------------------------------------------------
+        # AGENT DECISION CYCLE
+        # --------------------------------------------------
+
+        # ATC observes world and plans
+        atc_agent.plan(world, aircraft_list)
+        
+        # Pilots observe messages and plan
+        for pilot in pilot_agents:
+            pilot.plan(world)
+
+        # Execute actions
+        atc_agent.act()
+
+        for pilot in pilot_agents:
+            pilot.act()
+
+        # --------------------------------------------------
+        # PHYSICS UPDATE
+        # --------------------------------------------------
         for aircraft in aircraft_list:
             AircraftPhysics.update(aircraft, dt)
 
-            # DEBUG PRINT
-            print(
-                aircraft.callsign,
-                aircraft.current_state,
-                aircraft.current_node.name if aircraft.current_node else "On Edge",
-                aircraft.distance_on_edge,
-                aircraft.current_edge.occupied_by if aircraft.current_edge else "No Edge"
-            )
+        # --------------------------------------------------
+        # CLEANUP DEPARTED AIRCRAFT
+        # --------------------------------------------------
+        for aircraft in aircraft_list[:]:
+            if aircraft.current_state == "AIRBORNE":
+                if aircraft.current_edge is None:
+                    aircraft_list.remove(aircraft)
+
+                    # remove associated pilot agent
+                    pilot_agents[:] = [
+                        p for p in pilot_agents
+                        if p.aircraft != aircraft
+                    ]
+
+        # --------------------------------------------------
+        # UI UPDATE
+        # --------------------------------------------------
+        visualizer.update()
+
+    pygame.quit()
 
 
 if __name__ == "__main__":

@@ -96,18 +96,17 @@ class AircraftPhysics:
 
         node_type = arrived_node.type
 
-        # 3️⃣ State transitions based on node type
-
         if node_type == "holding_point":
             aircraft.current_state = "WAITING_CLEARANCE"
 
         elif node_type == "runway_threshold":
-            # Automatically continue TAKEOFF_ROLL
-            # Pick outgoing runway edge
+            # Continue to runway edge automatically
             if arrived_node.outgoing_edges:
                 next_edge = arrived_node.outgoing_edges[0]
-                aircraft.current_edge = next_edge
                 next_edge.occupy(aircraft)
+                aircraft.current_edge = next_edge
+                aircraft.current_node = None
+                aircraft.distance_on_edge = 0
                 aircraft.current_state = "TAKEOFF_ROLL"
 
         elif node_type == "air":
@@ -117,5 +116,9 @@ class AircraftPhysics:
             aircraft.current_state = "PARKED"
 
         else:
-            aircraft.current_state = "WAITING_CLEARANCE"
+            # Continue taxi route automatically if more edges exist
+            if aircraft.route_queue:
+                aircraft._proceed_to_next_edge()
+            else:
+                aircraft.current_state = "WAITING_CLEARANCE"
 
