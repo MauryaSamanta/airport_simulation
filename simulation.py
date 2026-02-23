@@ -39,7 +39,7 @@ def main():
     # --------------------------------------------------
     # UI
     # --------------------------------------------------
-    visualizer = Visualizer(world, aircraft_list)
+    visualizer = Visualizer(world, aircraft_list, bus)
 
     # --------------------------------------------------
     # SIMULATION VARIABLES
@@ -100,7 +100,7 @@ def main():
 
         # ATC observes world and plans
         atc_agent.plan(world, aircraft_list)
-        
+
         # Pilots observe messages and plan
         for pilot in pilot_agents:
             pilot.plan(world)
@@ -121,8 +121,7 @@ def main():
         # CLEANUP DEPARTED AIRCRAFT
         # --------------------------------------------------
         for aircraft in aircraft_list[:]:
-            if aircraft.current_state == "AIRBORNE":
-                if aircraft.current_edge is None:
+            if aircraft.x < 0 or aircraft.x > 1200 or aircraft.y < 0 or aircraft.y > 700:
                     aircraft_list.remove(aircraft)
 
                     # remove associated pilot agent

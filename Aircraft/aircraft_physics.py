@@ -14,6 +14,24 @@ class AircraftPhysics:
         if aircraft.current_state in ["TAXIING", "TAKEOFF_ROLL"]:
             AircraftPhysics._move_along_edge(aircraft, dt)
 
+        aircraft.altitude += aircraft.vertical_speed * dt
+
+        if aircraft.altitude < 0:
+            aircraft.altitude = 0
+
+        if aircraft.current_state == "AIRBORNE":
+
+        # Continue straight ahead from runway heading
+            heading_vector_x = 0.5
+            heading_vector_y = -1.0
+
+            magnitude = (heading_vector_x**2 + heading_vector_y**2) ** 0.5
+            heading_vector_x /= magnitude
+            heading_vector_y /= magnitude
+
+            aircraft.x += heading_vector_x * aircraft.speed * dt
+            aircraft.y += heading_vector_y * aircraft.speed * dt
+
     # -------------------------------------------------
 
     @staticmethod
@@ -46,9 +64,13 @@ class AircraftPhysics:
         elif state == "HOLDING_SHORT":
             aircraft.speed = 0
 
-        elif state == "AIRBORNE":
-    # Airborne aircraft does not depend on edge
-            aircraft.speed += 2.5
+        # Vertical motion update
+        elif aircraft.current_state == "AIRBORNE":
+            aircraft.vertical_speed = 5.0     # climb rate (m/s)
+        elif aircraft.current_state == "ON_FINAL":
+            aircraft.vertical_speed = -4.0    # descent rate
+        else:
+            aircraft.vertical_speed = 0.0
 
     # -------------------------------------------------
 
@@ -66,11 +88,17 @@ class AircraftPhysics:
 
     @staticmethod
     def _move_along_edge(aircraft, dt):
-        """
-        Move aircraft along current edge.
-        """
 
         aircraft.distance_on_edge += aircraft.speed * dt
+
+        start = aircraft.current_edge.start_node
+        end = aircraft.current_edge.end_node
+
+        progress = aircraft.distance_on_edge / aircraft.current_edge.length
+        progress = min(progress, 1)
+
+        aircraft.x = start.x + progress * (end.x - start.x)
+        aircraft.y = start.y + progress * (end.y - start.y)
 
         if aircraft.distance_on_edge >= aircraft.current_edge.length:
             AircraftPhysics._arrive_at_node(aircraft)
@@ -83,42 +111,69 @@ class AircraftPhysics:
         Called when aircraft reaches end of edge.
         """
 
-        # 1️⃣ Release occupied edge
-        if aircraft.current_edge is not None:
-            aircraft.current_edge.release()
+        # Save edge reference BEFORE clearing
+        finished_edge = aircraft.current_edge
 
-        # 2️⃣ Move to node
-        arrived_node = aircraft.current_edge.end_node
-        aircraft.current_node = arrived_node
+        # Release occupied edge
+        if finished_edge is not None:
+            finished_edge.release()
+
+        arrived_node = finished_edge.end_node
+
         aircraft.current_edge = None
         aircraft.distance_on_edge = 0
-        aircraft.speed = 0
 
         node_type = arrived_node.type
 
+        # -------------------------------------------------
+        # HOLDING POINT
+        # -------------------------------------------------
         if node_type == "holding_point":
+            aircraft.current_node = arrived_node
+            aircraft.speed = 0
             aircraft.current_state = "WAITING_CLEARANCE"
 
+        # -------------------------------------------------
+        # RUNWAY THRESHOLD
+        # -------------------------------------------------
         elif node_type == "runway_threshold":
-            # Continue to runway edge automatically
+            aircraft.current_node = arrived_node
+            aircraft.speed = 0
+
             if arrived_node.outgoing_edges:
                 next_edge = arrived_node.outgoing_edges[0]
-                next_edge.occupy(aircraft)
-                aircraft.current_edge = next_edge
-                aircraft.current_node = None
-                aircraft.distance_on_edge = 0
-                aircraft.current_state = "TAKEOFF_ROLL"
 
+                if next_edge.is_free():
+                    next_edge.occupy(aircraft)
+                    aircraft.current_edge = next_edge
+                    aircraft.current_node = None
+                    aircraft.current_state = "TAKEOFF_ROLL"
+
+        # -------------------------------------------------
+        # AIR (THIS IS THE FIX)
+        # -------------------------------------------------
         elif node_type == "air":
+            # DO NOT zero speed
+            aircraft.current_node = None
             aircraft.current_state = "AIRBORNE"
+            # keep speed as is
 
+        # -------------------------------------------------
+        # GATE
+        # -------------------------------------------------
         elif node_type == "gate":
+            aircraft.current_node = arrived_node
+            aircraft.speed = 0
             aircraft.current_state = "PARKED"
 
+        # -------------------------------------------------
+        # CONTINUE TAXI IF ROUTE EXISTS
+        # -------------------------------------------------
         else:
-            # Continue taxi route automatically if more edges exist
+            aircraft.current_node = arrived_node
+
             if aircraft.route_queue:
                 aircraft._proceed_to_next_edge()
             else:
+                aircraft.speed = 0
                 aircraft.current_state = "WAITING_CLEARANCE"
-

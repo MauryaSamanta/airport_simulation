@@ -4,7 +4,7 @@ import math
 
 class Visualizer:
 
-    def __init__(self, world, aircraft_list):
+    def __init__(self, world, aircraft_list, bus):
 
         pygame.init()
 
@@ -33,9 +33,58 @@ class Visualizer:
         self.radar_center = (550, 350)
         self.radar_radius = 320
 
+        self.bus = bus
+        self.comms_log = []
+        self.max_log_lines = 25
+
+        bus.register_listener(self.log_message)
+
     # ---------------------------------------------------------
     def draw_background(self):
         self.screen.fill(self.bg_color)
+
+    def log_message(self, message):
+
+        # Convert structured message into readable string
+        if message.type == "CLEARANCE_TAXI":
+            text = f"{message.sender} → {message.receiver}: Taxi via {message.content['route']}"
+        elif message.type == "CLEARANCE_TAKEOFF":
+            text = f"{message.sender} → {message.receiver}: Cleared for takeoff RWY {message.content['runway']}"
+        else:
+            text = f"{message.sender} → {message.receiver}: {message.type}"
+
+        self.comms_log.append(text)
+
+        if len(self.comms_log) > 200:
+            self.comms_log.pop(0)
+
+    def draw_comms_panel(self):
+
+        panel_x = 800
+        panel_width = 500
+
+        # Background
+        pygame.draw.rect(self.screen,
+                        (10, 18, 22),
+                        (panel_x, 0, panel_width, self.height))
+
+        pygame.draw.line(self.screen,
+                        (0, 80, 60),
+                        (panel_x, 0),
+                        (panel_x, self.height), 2)
+
+        # Title
+        title = self.airport_font.render("ATC COMMUNICATIONS", True, self.radar_green)
+        self.screen.blit(title, (panel_x + 15, 20))
+
+        # Messages
+        y_offset = 70
+        recent = self.comms_log[-self.max_log_lines:]
+
+        for line in recent:
+            text = self.tag_font.render(line, True, (200, 200, 200))
+            self.screen.blit(text, (panel_x + 15, y_offset))
+            y_offset += 20
 
     # ---------------------------------------------------------
     def draw_radar_grid(self):
@@ -135,25 +184,20 @@ class Visualizer:
 
         for aircraft in self.aircraft_list:
 
-            if aircraft.current_edge:
+            x = aircraft.x
+            y = aircraft.y
 
+            # Determine heading angle
+            if aircraft.current_edge:
                 start = aircraft.current_edge.start_node
                 end = aircraft.current_edge.end_node
-
-                progress = aircraft.distance_on_edge / aircraft.current_edge.length
-                progress = min(progress, 1)
-
-                x = start.x + progress * (end.x - start.x)
-                y = start.y + progress * (end.y - start.y)
-
                 angle = math.atan2(end.y - start.y, end.x - start.x)
 
-            elif aircraft.current_node:
-                x = aircraft.current_node.x
-                y = aircraft.current_node.y
-                angle = 0
+            elif aircraft.current_state == "AIRBORNE":
+                angle = -math.pi / 2  # pointing upward (temporary)
+
             else:
-                continue
+                angle = 0
 
             pygame.draw.circle(self.screen,
                                (0, 100, 70),
@@ -184,15 +228,22 @@ class Visualizer:
 
         pygame.draw.rect(self.screen,
                          self.tag_bg,
-                         (tag_x, tag_y, 120, 45), 0)
+                         (tag_x, tag_y, 140, 85), 0)
 
         pygame.draw.rect(self.screen,
                          (0, 120, 80),
-                         (tag_x, tag_y, 120, 45), 1)
+                         (tag_x, tag_y, 140, 85), 1)
+
+        gs_knots = aircraft.speed * 1.94384
+        vs_fpm = aircraft.vertical_speed * 196.85
+        alt_ft = aircraft.altitude * 3.28084
 
         lines = [
             aircraft.callsign,
             aircraft.current_state,
+            f"GS {int(gs_knots)} kt",
+            f"VS {int(vs_fpm)} fpm",
+            f"ALT {int(alt_ft)} ft"
         ]
 
         offset = 5
@@ -226,10 +277,10 @@ class Visualizer:
         self.draw_background()
         self.draw_radar_grid()
         self.draw_edges()
-        self.draw_airport_labels()   # <-- NEW
+        self.draw_airport_labels()  
         self.draw_nodes()
         self.draw_aircraft()
         self.draw_status_bar()
-
+        self.draw_comms_panel() 
         pygame.display.flip()
         self.clock.tick(60)

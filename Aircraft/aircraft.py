@@ -1,12 +1,14 @@
 class Aircraft:
 
     def __init__(self,
-                 callsign,
-                 current_node=None,
-                 current_edge=None,
-                 distance_on_edge=0.0,
-                 speed=0.0,
-                 current_state="PARKED"):
+             callsign,
+             current_node=None,
+             current_edge=None,
+             distance_on_edge=0.0,
+             speed=0.0,
+             current_state="PARKED",
+             altitude=0.0,
+             vertical_speed=0.0):
 
         self.callsign = callsign
 
@@ -16,13 +18,22 @@ class Aircraft:
         self.distance_on_edge = distance_on_edge
 
         # Motion
-        self.speed = speed
+        self.speed = speed                 # horizontal speed (m/s)
+        self.vertical_speed = vertical_speed  # m/s
+        self.altitude = altitude           # meters
 
-        # Operational state
+        # State
         self.current_state = current_state
 
-        # Route management
-        self.route_queue = []   # List of Edge objects
+        # Route
+        self.route_queue = []
+
+        if current_node:
+            self.x = current_node.x
+            self.y = current_node.y
+        else:
+            self.x = 0
+            self.y = 0
 
     # -------------------------------------------------
     # ROUTE ASSIGNMENT
